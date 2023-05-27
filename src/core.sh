@@ -823,6 +823,7 @@ api() {
     [[ ! $1 ]] && err "无法识别 API 的参数."
     [[ $is_core_stop ]] && {
         warn "$is_core_name 当前处于停止状态."
+        is_api_fail=1
         return
     }
     case $1 in
@@ -1239,7 +1240,7 @@ get() {
         dokodemo-door*)
             is_protocol=dokodemo-door
             net=door
-            json_str='settings:{port:'\"$door_port\"',address:'\"$door_addr\"',network:"tcp,udp"}'
+            json_str='settings:{port:'"$door_port"',address:'\"$door_addr\"',network:"tcp,udp"}'
             ;;
         *http*)
             is_protocol=http
@@ -1388,7 +1389,7 @@ get() {
             return
         }
         is_no_manage_msg=1
-        if [[ $is_core_stop ]]; then
+        if [[ ! $(pgrep -f $is_core_bin) ]]; then
             _yellow "\n测试运行 $is_core_name ..\n"
             manage start &>/dev/null
             if [[ $is_run_fail == $is_core ]]; then
@@ -1401,7 +1402,7 @@ get() {
             _green "\n$is_core_name 正在运行, 跳过测试\n"
         fi
         if [[ $is_caddy ]]; then
-            if [[ $is_caddy_stop ]]; then
+            if [[ ! $(pgrep -f $is_caddy_bin) ]]; then
                 _yellow "\n测试运行 Caddy ..\n"
                 manage start caddy &>/dev/null
                 if [[ $is_run_fail == 'caddy' ]]; then
