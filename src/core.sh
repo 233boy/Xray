@@ -92,10 +92,10 @@ change_list=(
 )
 servername_list=(
     www.amazon.com
-    www.microsoft.com
-    www.apple.com
+    www.ebay.com
+    www.paypal.com
+    www.cloudflare.com
     dash.cloudflare.com
-    dl.google.com
     aws.amazon.com
 )
 
