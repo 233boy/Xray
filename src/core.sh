@@ -1695,7 +1695,7 @@ is_main_menu() {
         show_help
         ;;
     9)
-        ask list is_do_other "启用BBR 查看日志 查看错误日志 测试运行 重装脚本"
+        ask list is_do_other "启用BBR 查看日志 查看错误日志 测试运行 重装脚本 设置DNS"
         case $REPLY in
         1)
             load bbr.sh
@@ -1712,6 +1712,10 @@ is_main_menu() {
             ;;
         5)
             get reinstall
+            ;;
+        6)
+            load dns.sh
+            dns_set
             ;;
         esac
         ;;
@@ -1785,6 +1789,10 @@ main() {
         is_dont_auto_exit=
         [[ $is_api_fail ]] && manage restart &
         [[ $is_del_host ]] && manage restart caddy &
+        ;;
+    dns)
+        load dns.sh
+        dns_set ${@:2}
         ;;
     debug)
         is_debug=1
