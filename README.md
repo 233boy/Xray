@@ -50,7 +50,7 @@
 使用：`xray help`
 
 ```
-Xray script v1.0 by 233boy
+Xray script v1.21 by 233boy
 Usage: xray [options]... [args]...
 
 基本:
@@ -96,7 +96,7 @@ Usage: xray [options]... [args]...
 
 管理:
    un, uninstall                                   卸载
-   u, update [core | sh | caddy] [ver]             更新
+   u, update [core | sh | dat | caddy] [ver]       更新
    U, update.sh                                    更新脚本
    s, status                                       运行状态
    start, stop, restart [caddy]                    启动, 停止, 重启
@@ -104,9 +104,10 @@ Usage: xray [options]... [args]...
    reinstall                                       重装脚本
 
 测试:
-   client, genc [name]                             显示用于客户端 JSON, 仅供参考
+   client [name]                                   显示用于客户端 JSON, 仅供参考
    debug [name]                                    显示一些 debug 信息, 仅供参考
    gen [...]                                       同等于 add, 但只显示 JSON 内容, 不创建文件, 测试使用
+   genc [name]                                     显示用于客户端部分 JSON, 仅供参考
    no-auto-tls [...]                               同等于 add, 但禁止自动配置 TLS, 可用于 *TLS 相关协议
    xapi [...]                                      同等于 xray api, 但 API 后端使用当前运行的 Xray 服务
 
