@@ -10,6 +10,7 @@ protocol_list=(
     VLESS-H2-TLS
     VLESS-WS-TLS
     VLESS-gRPC-TLS
+    VLESS-SplitHTTP-TLS
     VLESS-REALITY
     Trojan-H2-TLS
     Trojan-WS-TLS
@@ -321,7 +322,6 @@ ask() {
 create() {
     case $1 in
     server)
-        is_tls=none
         get new
 
         # file name
@@ -333,19 +333,13 @@ create() {
         is_json_file=$is_conf_dir/$is_config_name
         # get json
         [[ $is_change || ! $json_str ]] && get protocol $2
-        case $net in
-        ws | h2 | grpc | http)
-            is_listen='"listen": "127.0.0.1"'
-            ;;
-        *)
-            is_listen='"listen": "0.0.0.0"'
-            ;;
-        esac
+        is_listen='listen:"0.0.0.0"'
+        [[ $host ]] && is_listen=${is_listen/0.0.0.0/127.0.0.1}
         is_sniffing='sniffing:{enabled:true,destOverride:["http","tls"]}'
-        is_new_json=$(jq '{inbounds:[{tag:'\"$is_config_name\"',port:'"$port"','"$is_listen"',protocol:'\"$is_protocol\"','"$json_str"','"$is_sniffing"'}]}' <<<{})
+        is_new_json=$(jq '{inbounds:[{tag:"'$is_config_name'",port:'"$port"','"$is_listen"',protocol:"'$is_protocol'",'"$json_str"','"$is_sniffing"'}]}' <<<{})
         if [[ $is_dynamic_port ]]; then
             [[ ! $is_dynamic_port_range ]] && get dynamic-port
-            is_new_dynamic_port_json=$(jq '{inbounds:[{tag:'\"$is_config_name-link.json\"',port:'\"$is_dynamic_port_range\"','"$is_listen"',protocol:"vmess",'"$is_stream"','"$is_sniffing"',allocate:{strategy:"random"}}]}' <<<{})
+            is_new_dynamic_port_json=$(jq '{inbounds:[{tag:"'$is_config_name-link.json'",port:"'$is_dynamic_port_range'",'"$is_listen"',protocol:"vmess",'"$is_stream"','"$is_sniffing"',allocate:{strategy:"random"}}]}' <<<{})
         fi
         [[ $is_test_json ]] && return # tmp test
         # only show json, dont save to file.
@@ -383,12 +377,13 @@ create() {
         is_client=1
         get info $2
         [[ ! $is_client_id_json ]] && err "($is_config_name) 不支持生成客户端配置."
-        is_new_json=$(jq '{outbounds:[{tag:'\"$is_config_name\"',protocol:'\"$is_protocol\"','"$is_client_id_json"','"$is_stream"'}]}' <<<{})
+        [[ $host ]] && is_stream="${is_stream/network:\"$net\"/network:\"$net\",security:\"tls\"}"
+        is_new_json=$(jq '{outbounds:[{tag:"'$is_config_name'",protocol:"'$is_protocol'",'"$is_client_id_json"','"$is_stream"'}]}' <<<{})
         if [[ $is_full_client ]]; then
             is_dns='dns:{servers:[{address:"223.5.5.5",domain:["geosite:cn","geosite:geolocation-cn"],expectIPs:["geoip:cn"]},"1.1.1.1","8.8.8.8"]}'
             is_route='routing:{rules:[{type:"field",outboundTag:"direct",ip:["geoip:cn","geoip:private"]},{type:"field",outboundTag:"direct",domain:["geosite:cn","geosite:geolocation-cn"]}]}'
             is_inbounds='inbounds:[{port:2333,listen:"127.0.0.1",protocol:"socks",settings:{udp:true},sniffing:{enabled:true,destOverride:["http","tls"]}}]'
-            is_outbounds='outbounds:[{tag:'\"$is_config_name\"',protocol:'\"$is_protocol\"','"$is_client_id_json"','"$is_stream"'},{tag:"direct",protocol:"freedom"}]'
+            is_outbounds='outbounds:[{tag:"'$is_config_name'",protocol:"'$is_protocol'",'"$is_client_id_json"','"$is_stream"'},{tag:"direct",protocol:"freedom"}]'
             is_new_json=$(jq '{'$is_dns,$is_route,$is_inbounds,$is_outbounds'}' <<<{})
         fi
         msg
@@ -502,8 +497,8 @@ change() {
         [[ $is_auto_get_config ]] && msg "\n自动选择: $is_config_file"
     }
     is_old_net=$net
-    [[ $is_protocol == 'vless' && ! $is_reality ]] && net=v$net
-    [[ $is_protocol == 'trojan' ]] && net=t$net
+    [[ $host ]] && net=$is_protocol-$net-tls
+    [[ $is_reality ]] && net=reality
     [[ $is_dynamic_port ]] && net=${net}d
     [[ $3 == 'auto' ]] && is_auto=1
     # if is_dont_show_info exist, cant show info.
@@ -886,6 +881,9 @@ add() {
         ws | h2 | grpc | vws | vh2 | vgrpc | tws | th2 | tgrpc)
             is_new_protocol=$(sed -E "s/^V/VLESS-/;s/^T/Trojan-/;/^(W|H|G)/{s/^/VMess-/};s/G/g/" <<<${is_lower^^})-TLS
             ;;
+        vsh | split | splithttp)
+            is_new_protocol=VLESS-SplitHTTP-TLS
+            ;;
         r | reality)
             is_new_protocol=VLESS-REALITY
             ;;
@@ -898,9 +896,9 @@ add() {
         socks)
             is_new_protocol=Socks
             ;;
-        http)
-            is_new_protocol=local-$is_lower
-            ;;
+        # http)
+        #     is_new_protocol=local-$is_lower
+        #     ;;
         *)
             for v in ${protocol_list[@]}; do
                 [[ $(egrep -i "^$is_lower$" <<<$v) ]] && is_new_protocol=$v && break
@@ -983,7 +981,7 @@ add() {
             kcp_seed=
             [[ $(grep -i tcp <<<$is_new_protocol) ]] && header_type=
             ;;
-        h2 | ws | grpc)
+        h2 | ws | grpc | splithttp)
             old_host=$host
             if [[ ! $is_use_tls ]]; then
                 host=
@@ -994,9 +992,6 @@ add() {
             fi
             [[ ! $(grep -i trojan <<<$is_new_protocol) ]] && is_trojan=
             ;;
-        reality)
-            [[ ! $(grep -i reality <<<$is_new_protocol) ]] && is_reality=
-            ;;
         ss)
             [[ $(is_test uuid $ss_password) ]] && uuid=$ss_password
             ;;
@@ -1006,6 +1001,7 @@ add() {
         }
 
         [[ ! $(is_test uuid $uuid) ]] && uuid=
+        [[ ! $(grep -i reality <<<$is_new_protocol) ]] && is_reality=
     fi
 
     # no-auto-tls only use h2,ws,grpc
@@ -1203,12 +1199,12 @@ get() {
         get file $2
         if [[ $is_config_file ]]; then
             is_json_str=$(cat $is_conf_dir/"$is_config_file")
-            is_json_data_base=$(jq '.inbounds[0]|.protocol,.port,.settings.clients[0].id,.settings.clients[0].password,.settings.method,.settings.password,.settings.address,.settings.port,.settings.detour.to,.settings.accounts[0].user,.settings.accounts[0].pass' <<<$is_json_str)
+            is_json_data_base=$(jq '.inbounds[0]|.protocol,.port,(.settings|(.clients[0]|.id,.password),.method,.password,.address,.port,.detour.to,(.accounts[0]|.user,.pass))' <<<$is_json_str)
             [[ $? != 0 ]] && err "无法读取此文件: $is_config_file"
-            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.security,.tcpSettings.header.type,.kcpSettings.seed,.kcpSettings.header.type,.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName' <<<$is_json_str)
-            is_json_data_host=$(jq '.inbounds[0]|.streamSettings|.grpc_host,.wsSettings.headers.Host,.httpSettings.host[0]' <<<$is_json_str)
-            is_json_data_reality=$(jq '.inbounds[0]|.streamSettings|.realitySettings.serverNames[0],.realitySettings.publicKey,.realitySettings.privateKey' <<<$is_json_str)
-            is_up_var_set=(null is_protocol port uuid trojan_password ss_method ss_password door_addr door_port is_dynamic_port is_socks_user is_socks_pass net is_reality tcp_type kcp_seed kcp_type quic_type ws_path h2_path grpc_path grpc_host ws_host h2_host is_servername is_public_key is_private_key)
+            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.tcpSettings.header.type,(.kcpSettings|.seed,.header.type),.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName,.splithttpSettings.path' <<<$is_json_str)
+            is_json_data_host=$(jq '.inbounds[0]|.streamSettings|.grpc_host,.wsSettings.headers.Host,.httpSettings.host[0],.splithttpSettings.host' <<<$is_json_str)
+            is_json_data_reality=$(jq '.inbounds[0]|.streamSettings|.security,(.realitySettings|.serverNames[0],.publicKey,.privateKey)' <<<$is_json_str)
+            is_up_var_set=(null is_protocol port uuid trojan_password ss_method ss_password door_addr door_port is_dynamic_port is_socks_user is_socks_pass net tcp_type kcp_seed kcp_type quic_type ws_path h2_path grpc_path split_path grpc_host ws_host h2_host split_host is_reality is_servername is_public_key is_private_key)
             [[ $is_debug ]] && msg "\n------------- debug: $is_config_file -------------"
             i=0
             for v in $(sed 's/""/null/g;s/"//g' <<<"$is_json_data_base $is_json_data_more $is_json_data_host $is_json_data_reality"); do
@@ -1220,8 +1216,8 @@ get() {
                 [[ ${!v} == 'null' ]] && unset $v
             done
 
-            path="${ws_path}${h2_path}${grpc_path}"
-            host="${ws_host}${h2_host}${grpc_host}"
+            path="${ws_path}${h2_path}${grpc_path}${split_path}"
+            host="${ws_host}${h2_host}${grpc_host}${split_host}"
             header_type="${tcp_type}${kcp_type}${quic_type}"
             if [[ $is_reality == 'reality' ]]; then
                 net=reality
@@ -1251,55 +1247,55 @@ get() {
         vmess*)
             is_protocol=vmess
             if [[ $is_dynamic_port ]]; then
-                is_server_id_json='settings:{clients:[{id:'\"$uuid\"'}],detour:{to:'\"$is_config_name-link.json\"'}}'
+                is_server_id_json='settings:{clients:[{id:"'$uuid'"}],detour:{to:"'$is_config_name-link.json'"}}'
             else
-                is_server_id_json='settings:{clients:[{id:'\"$uuid\"'}]}'
+                is_server_id_json='settings:{clients:[{id:"'$uuid'"}]}'
             fi
-            is_client_id_json='settings:{vnext:[{address:'\"$is_addr\"',port:'"$port"',users:[{id:'\"$uuid\"'}]}]}'
+            is_client_id_json='settings:{vnext:[{address:"'$is_addr'",port:'"$port"',users:[{id:"'$uuid'"}]}]}'
             ;;
         vless*)
             is_protocol=vless
-            is_server_id_json='settings:{clients:[{id:'\"$uuid\"'}],decryption:"none"}'
-            is_client_id_json='settings:{vnext:[{address:'\"$is_addr\"',port:'"$port"',users:[{id:'\"$uuid\"',encryption:"none"}]}]}'
+            is_server_id_json='settings:{clients:[{id:"'$uuid'"}],decryption:"none"}'
+            is_client_id_json='settings:{vnext:[{address:"'$is_addr'",port:'"$port"',users:[{id:"'$uuid'",encryption:"none"}]}]}'
             if [[ $is_reality ]]; then
-                is_server_id_json='settings:{clients:[{id:'\"$uuid\"',flow:"xtls-rprx-vision"}],decryption:"none"}'
-                is_client_id_json='settings:{vnext:[{address:'\"$is_addr\"',port:'"$port"',users:[{id:'\"$uuid\"',encryption:"none",flow:"xtls-rprx-vision"}]}]}'
+                is_server_id_json='settings:{clients:[{id:"'$uuid'",flow:"xtls-rprx-vision"}],decryption:"none"}'
+                is_client_id_json='settings:{vnext:[{address:"'$is_addr'",port:'"$port"',users:[{id:"'$uuid'",encryption:"none",flow:"xtls-rprx-vision"}]}]}'
             fi
             ;;
         trojan*)
             is_protocol=trojan
             [[ ! $trojan_password ]] && trojan_password=$uuid
-            is_server_id_json='settings:{clients:[{password:'\"$trojan_password\"'}]}'
-            is_client_id_json='settings:{servers:[{address:'\"$is_addr\"',port:'"$port"',password:'\"$trojan_password\"'}]}'
+            is_server_id_json='settings:{clients:[{password:"'$trojan_password'"}]}'
+            is_client_id_json='settings:{servers:[{address:"'$is_addr'",port:'"$port"',password:"'$trojan_password'"}]}'
             is_trojan=1
             ;;
         shadowsocks*)
-            is_protocol=shadowsocks
             net=ss
+            is_protocol=shadowsocks
             [[ ! $ss_method ]] && ss_method=$is_random_ss_method
             [[ ! $ss_password ]] && {
                 ss_password=$uuid
                 [[ $(grep 2022 <<<$ss_method) ]] && ss_password=$(get ss2022)
             }
-            is_client_id_json='settings:{servers:[{address:'\"$is_addr\"',port:'"$port"',method:'\"$ss_method\"',password:'\"$ss_password\"',}]}'
-            json_str='settings:{method:'\"$ss_method\"',password:'\"$ss_password\"',network:"tcp,udp"}'
+            is_client_id_json='settings:{servers:[{address:"'$is_addr'",port:'"$port"',method:"'$ss_method'",password:"'$ss_password'",}]}'
+            json_str='settings:{method:"'$ss_method'",password:"'$ss_password'",network:"tcp,udp"}'
             ;;
         dokodemo-door*)
-            is_protocol=dokodemo-door
             net=door
-            json_str='settings:{port:'"$door_port"',address:'\"$door_addr\"',network:"tcp,udp"}'
+            is_protocol=dokodemo-door
+            json_str='settings:{port:'"$door_port"',address:"'$door_addr'",network:"tcp,udp"}'
             ;;
         *http*)
-            is_protocol=http
             net=http
+            is_protocol=http
             json_str='settings:{"timeout": 233}'
             ;;
         *socks*)
-            is_protocol=socks
             net=socks
+            is_protocol=socks
             [[ ! $is_socks_user ]] && is_socks_user=233boy
             [[ ! $is_socks_pass ]] && is_socks_pass=$uuid
-            json_str='settings:{auth:"password",accounts:[{user:'\"$is_socks_user\"',pass:'\"$is_socks_pass\"'}],udp:true}'
+            json_str='settings:{auth:"password",accounts:[{user:"'$is_socks_user'",pass:"'$is_socks_pass'"}],udp:true}'
             ;;
         *)
             err "无法识别协议: $is_config_file"
@@ -1307,58 +1303,57 @@ get() {
         esac
         [[ $net ]] && return # if net exist, dont need more json args
         case $is_lower in
-        *tcp*)
+        *tcp* | *reality*)
             net=tcp
             [[ ! $header_type ]] && header_type=none
-            is_stream='streamSettings:{network:"tcp",tcpSettings:{header:{type:'\"$header_type\"'}}}'
-            json_str=''"$is_server_id_json"','"$is_stream"''
+            is_stream='tcpSettings:{header:{type:"'$header_type'"}}'
+            if [[ $is_reality ]]; then
+                [[ ! $is_servername ]] && is_servername=$is_random_servername
+                [[ ! $is_private_key ]] && get_pbk
+                is_stream='security:"reality",realitySettings:{dest:"'${is_servername}\:443'",serverNames:["'${is_servername}'",""],publicKey:"'$is_public_key'",privateKey:"'$is_private_key'",shortIds:[""]}'
+                if [[ $is_client ]]; then
+                    is_stream='security:"reality",realitySettings:{serverName:"'${is_servername}'",fingerprint:"chrome",publicKey:"'$is_public_key'",shortId:"",spiderX:"/"}'
+                fi
+            fi
             ;;
         *kcp* | *mkcp)
             net=kcp
             [[ ! $header_type ]] && header_type=$is_random_header_type
             [[ ! $is_no_kcp_seed && ! $kcp_seed ]] && kcp_seed=$uuid
-            is_stream='streamSettings:{network:"kcp",kcpSettings:{seed:'\"$kcp_seed\"',header:{type:'\"$header_type\"'}}}'
-            json_str=''"$is_server_id_json"','"$is_stream"''
+            is_stream='kcpSettings:{seed:"'$kcp_seed'",header:{type:"'$header_type'"}}'
             ;;
         *quic*)
             net=quic
             [[ ! $header_type ]] && header_type=$is_random_header_type
-            is_stream='streamSettings:{network:"quic",quicSettings:{header:{type:'\"$header_type\"'}}}'
-            json_str=''"$is_server_id_json"','"$is_stream"''
+            is_stream='quicSettings:{header:{type:"'$header_type'"}}'
             ;;
         *ws* | *websocket)
             net=ws
             [[ ! $path ]] && path="/$uuid"
-            is_stream='streamSettings:{network:"ws",security:'\"$is_tls\"',wsSettings:{path:'\"$path\"',headers:{Host:'\"$host\"'}}}'
-            json_str=''"$is_server_id_json"','"$is_stream"''
+            is_stream='wsSettings:{path:"'$path'",headers:{Host:"'$host'"}}'
             ;;
         *grpc* | *gun)
             net=grpc
             [[ ! $path ]] && path="$uuid"
             [[ $path ]] && path=$(sed 's#/##g' <<<$path)
-            is_stream='streamSettings:{network:"grpc",grpc_host:'\"$host\"',security:'\"$is_tls\"',grpcSettings:{serviceName:'\"$path\"'}}'
-            json_str=''"$is_server_id_json"','"$is_stream"''
+            is_stream='grpc_host:"'$host'",grpcSettings:{serviceName:"'$path'"}'
             ;;
-        *h2* | *http*)
+        *h2*)
             net=h2
             [[ ! $path ]] && path="/$uuid"
-            is_stream='streamSettings:{network:"h2",security:'\"$is_tls\"',httpSettings:{path:'\"$path\"',host:['\"$host\"']}}'
-            json_str=''"$is_server_id_json"','"$is_stream"''
+            is_stream='httpSettings:{path:"'$path'",host:["'$host'"]}'
             ;;
-        *reality*)
-            net=reality
-            [[ ! $is_servername ]] && is_servername=$is_random_servername
-            [[ ! $is_private_key ]] && get_pbk
-            is_stream='streamSettings:{network:"tcp",security:"reality",realitySettings:{dest:'\"${is_servername}\:443\"',serverNames:['\"${is_servername}\"',""],publicKey:'\"$is_public_key\"',privateKey:'\"$is_private_key\"',shortIds:[""]}}'
-            if [[ $is_client ]]; then
-                is_stream='streamSettings:{network:"tcp",security:"reality",realitySettings:{serverName:'\"${is_servername}\"',"fingerprint": "ios",publicKey:'\"$is_public_key\"',"shortId": "","spiderX": "/"}}'
-            fi
-            json_str=''"$is_server_id_json"','"$is_stream"''
+        *split*)
+            net=splithttp
+            [[ ! $path ]] && path="/$uuid"
+            is_stream='splithttpSettings:{host:"'$host'",path:"'$path'"}'
             ;;
         *)
             err "无法识别传输协议: $is_config_file"
             ;;
         esac
+        is_stream="streamSettings:{network:\"$net\",$is_stream}"
+        json_str="$is_server_id_json,$is_stream"
         ;;
     dynamic-port) # create random dynamic port
         if [[ $port -ge 60000 ]]; then
@@ -1482,7 +1477,7 @@ info() {
     tcp | kcp | quic)
         is_can_change=(0 1 5 7)
         is_info_show=(0 1 2 3 4 5)
-        is_vmess_url=$(jq -c '{v:2,ps:'\"233boy-${net}-$is_addr\"',add:'\"$is_addr\"',port:'\"$port\"',id:'\"$uuid\"',aid:"0",net:'\"$net\"',type:'\"$header_type\"',path:'\"$kcp_seed\"'}' <<<{})
+        is_vmess_url=$(jq -c '{v:2,ps:"'233boy-${net}-$is_addr'",add:"'$is_addr'",port:"'$port'",id:"'$uuid'",aid:"0",net:"'$net'",type:"'$header_type'",path:"'$kcp_seed'"}' <<<{})
         is_url=vmess://$(echo -n $is_vmess_url | base64 -w 0)
         is_tmp_port=$port
         [[ $is_dynamic_port ]] && {
@@ -1494,6 +1489,13 @@ info() {
             is_can_change+=(14)
         }
         is_info_str=($is_protocol $is_addr "$is_tmp_port" $uuid $net $header_type $kcp_seed)
+        if [[ $is_reality ]]; then
+            is_color=41
+            is_can_change=(0 1 5 10 11)
+            is_info_show=(0 1 2 3 15 8 16 17 18)
+            is_info_str=($is_protocol $is_addr $port $uuid xtls-rprx-vision reality $is_servername "chrome" $is_public_key)
+            is_url="$is_protocol://$uuid@$ip:$port?encryption=none&security=reality&flow=xtls-rprx-vision&type=tcp&sni=$is_servername&pbk=$is_public_key&fp=chrome#233boy-$net-$is_addr"
+        fi
         ;;
     ss)
         is_can_change=(0 1 4 6)
@@ -1501,7 +1503,7 @@ info() {
         is_url="ss://$(echo -n ${ss_method}:${ss_password} | base64 -w 0)@${is_addr}:${port}#233boy-$net-${is_addr}"
         is_info_str=($is_protocol $is_addr $port $ss_password $ss_method)
         ;;
-    ws | h2 | grpc)
+    ws | h2 | grpc | splithttp)
         is_color=45
         is_can_change=(0 1 2 3 5)
         is_info_show=(0 1 2 3 4 6 7 8)
@@ -1511,7 +1513,7 @@ info() {
             is_url_path=serviceName
         }
         [[ $is_protocol == 'vmess' ]] && {
-            is_vmess_url=$(jq -c '{v:2,ps:'\"233boy-$net-$host\"',add:'\"$is_addr\"',port:'\"$is_https_port\"',id:'\"$uuid\"',aid:"0",net:'\"$net\"',host:'\"$host\"',path:'\"$path\"',tls:'\"tls\"'}' <<<{})
+            is_vmess_url=$(jq -c '{v:2,ps:"'233boy-$net-$host'",add:"'$is_addr'",port:"'$is_https_port'",id:"'$uuid'",aid:"0",net:"'$net'",host:"'$host'",path:"'$path'",tls:"'tls'"}' <<<{})
             is_url=vmess://$(echo -n $is_vmess_url | base64 -w 0)
         } || {
             [[ $is_trojan ]] && {
@@ -1523,13 +1525,6 @@ info() {
         }
         [[ $is_caddy ]] && is_can_change+=(13)
         is_info_str=($is_protocol $is_addr $is_https_port $uuid $net $host $path 'tls')
-        ;;
-    reality)
-        is_color=41
-        is_can_change=(0 1 5 10 11)
-        is_info_show=(0 1 2 3 15 8 16 17 18)
-        is_info_str=($is_protocol $is_addr $port $uuid xtls-rprx-vision reality $is_servername "ios" $is_public_key)
-        is_url="$is_protocol://$uuid@$ip:$port?encryption=none&security=reality&flow=xtls-rprx-vision&type=tcp&sni=$is_servername&pbk=$is_public_key&fp=ios#233boy-$net-$is_addr"
         ;;
     door)
         is_can_change=(0 1 8 9)
