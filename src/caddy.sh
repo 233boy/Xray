@@ -39,7 +39,7 @@ ${host}:${is_https_port} {
     import ${is_caddy_site_file}.add
 }"
         ;;
-    splithttp)
+    xhttp)
         cat >${is_caddy_site_file} <<<"
 ${host}:${is_https_port} {
     reverse_proxy ${path}/* 127.0.0.1:${port}

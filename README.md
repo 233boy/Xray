@@ -17,11 +17,11 @@
 - 支持所有常用协议
 - 一键添加 VLESS-REALITY (默认)
 - 一键添加 Shadowsocks 2022
-- 一键添加 VMess-(TCP/mKCP/QUIC)
+- 一键添加 VMess-(TCP/mKCP)
 - 一键添加 VMess-(WS/H2/gRPC)-TLS
-- 一键添加 VLESS-(WS/H2/gRPC)-TLS
+- 一键添加 VLESS-(WS/H2/gRPC/XHTTP)-TLS
 - 一键添加 Trojan-(WS/H2/gRPC)-TLS
-- 一键添加 VMess-(TCP/mKCP/QUIC) 动态端口
+- 一键添加 VMess-(TCP/mKCP) 动态端口
 - 一键启用 BBR
 - 一键更改伪装网站
 - 一键更改 (端口/UUID/密码/域名/路径/加密方式/SNI/动态端口/等...)

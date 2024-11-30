@@ -3,14 +3,14 @@
 protocol_list=(
     VMess-TCP
     VMess-mKCP
-    VMess-QUIC
+    # VMess-QUIC
     VMess-H2-TLS
     VMess-WS-TLS
     VMess-gRPC-TLS
     VLESS-H2-TLS
     VLESS-WS-TLS
     VLESS-gRPC-TLS
-    VLESS-SplitHTTP-TLS
+    VLESS-XHTTP-TLS
     VLESS-REALITY
     Trojan-H2-TLS
     Trojan-WS-TLS
@@ -19,7 +19,7 @@ protocol_list=(
     # Dokodemo-Door
     VMess-TCP-dynamic-port
     VMess-mKCP-dynamic-port
-    VMess-QUIC-dynamic-port
+    # VMess-QUIC-dynamic-port
     Socks
 )
 ss_method_list=(
@@ -125,7 +125,7 @@ get_uuid() {
 }
 
 get_ip() {
-    [[ $ip || $is_no_auto_tls || $is_gen ]] && return
+    [[ $ip || $is_no_auto_tls || $is_gen || $is_dont_get_ip ]] && return
     export "$(_wget -4 -qO- https://one.one.one.one/cdn-cgi/trace | grep ip=)" &>/dev/null
     [[ ! $ip ]] && export "$(_wget -6 -qO- https://one.one.one.one/cdn-cgi/trace | grep ip=)" &>/dev/null
     [[ ! $ip ]] && {
@@ -727,6 +727,8 @@ change() {
 
 # delete config.
 del() {
+    # dont get ip
+    is_dont_get_ip=1
     [[ $is_conf_dir_empty ]] && return # not found any json file.
     # get a config file
     [[ ! $is_config_file ]] && get info $1
@@ -756,6 +758,7 @@ del() {
         warn "当前配置目录为空! 因为你刚刚删除了最后一个配置文件."
         is_conf_dir_empty=1
     fi
+    unset is_dont_get_ip
     [[ $is_dont_auto_exit ]] && unset is_config_file
 }
 
@@ -875,14 +878,15 @@ add() {
     is_lower=${1,,}
     if [[ $is_lower ]]; then
         case $is_lower in
-        tcp | kcp | quic | tcpd | kcpd | quicd)
+        # tcp | kcp | quic | tcpd | kcpd | quicd)
+        tcp | kcp | tcpd | kcpd)
             is_new_protocol=VMess-$(sed 's/^K/mK/;s/D$/-dynamic-port/' <<<${is_lower^^})
             ;;
         ws | h2 | grpc | vws | vh2 | vgrpc | tws | th2 | tgrpc)
             is_new_protocol=$(sed -E "s/^V/VLESS-/;s/^T/Trojan-/;/^(W|H|G)/{s/^/VMess-/};s/G/g/" <<<${is_lower^^})-TLS
             ;;
-        vsh | split | splithttp)
-            is_new_protocol=VLESS-SplitHTTP-TLS
+        xhttp)
+            is_new_protocol=VLESS-XHTTP-TLS
             ;;
         r | reality)
             is_new_protocol=VLESS-REALITY
@@ -981,7 +985,7 @@ add() {
             kcp_seed=
             [[ $(grep -i tcp <<<$is_new_protocol) ]] && header_type=
             ;;
-        h2 | ws | grpc | splithttp)
+        h2 | ws | grpc | xhttp)
             old_host=$host
             if [[ ! $is_use_tls ]]; then
                 host=
@@ -1201,10 +1205,10 @@ get() {
             is_json_str=$(cat $is_conf_dir/"$is_config_file")
             is_json_data_base=$(jq '.inbounds[0]|.protocol,.port,(.settings|(.clients[0]|.id,.password),.method,.password,.address,.port,.detour.to,(.accounts[0]|.user,.pass))' <<<$is_json_str)
             [[ $? != 0 ]] && err "无法读取此文件: $is_config_file"
-            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.tcpSettings.header.type,(.kcpSettings|.seed,.header.type),.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName,.splithttpSettings.path' <<<$is_json_str)
-            is_json_data_host=$(jq '.inbounds[0]|.streamSettings|.grpc_host,.wsSettings.headers.Host,.httpSettings.host[0],.splithttpSettings.host' <<<$is_json_str)
+            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.tcpSettings.header.type,(.kcpSettings|.seed,.header.type),.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName,.xhttpSettings.path' <<<$is_json_str)
+            is_json_data_host=$(jq '.inbounds[0]|.streamSettings|.grpc_host,.wsSettings.headers.Host,.httpSettings.host[0],.xhttpSettings.host' <<<$is_json_str)
             is_json_data_reality=$(jq '.inbounds[0]|.streamSettings|.security,(.realitySettings|.serverNames[0],.publicKey,.privateKey)' <<<$is_json_str)
-            is_up_var_set=(null is_protocol port uuid trojan_password ss_method ss_password door_addr door_port is_dynamic_port is_socks_user is_socks_pass net tcp_type kcp_seed kcp_type quic_type ws_path h2_path grpc_path split_path grpc_host ws_host h2_host split_host is_reality is_servername is_public_key is_private_key)
+            is_up_var_set=(null is_protocol port uuid trojan_password ss_method ss_password door_addr door_port is_dynamic_port is_socks_user is_socks_pass net tcp_type kcp_seed kcp_type quic_type ws_path h2_path grpc_path xhttp_path grpc_host ws_host h2_host xhttp_host is_reality is_servername is_public_key is_private_key)
             [[ $is_debug ]] && msg "\n------------- debug: $is_config_file -------------"
             i=0
             for v in $(sed 's/""/null/g;s/"//g' <<<"$is_json_data_base $is_json_data_more $is_json_data_host $is_json_data_reality"); do
@@ -1216,8 +1220,14 @@ get() {
                 [[ ${!v} == 'null' ]] && unset $v
             done
 
-            path="${ws_path}${h2_path}${grpc_path}${split_path}"
-            host="${ws_host}${h2_host}${grpc_host}${split_host}"
+            # splithttp
+            if [[ $net == 'splithttp' ]]; then
+                net=xhttp
+                xhttp_path=$(jq -r '.inbounds[0]|.streamSettings|.splithttpSettings.path' <<<$is_json_str)
+                xhttp_host=$(jq -r '.inbounds[0]|.streamSettings|.splithttpSettings.host' <<<$is_json_str)
+            fi
+            path="${ws_path}${h2_path}${grpc_path}${xhttp_path}"
+            host="${ws_host}${h2_host}${grpc_host}${xhttp_host}"
             header_type="${tcp_type}${kcp_type}${quic_type}"
             if [[ $is_reality == 'reality' ]]; then
                 net=reality
@@ -1343,10 +1353,10 @@ get() {
             [[ ! $path ]] && path="/$uuid"
             is_stream='httpSettings:{path:"'$path'",host:["'$host'"]}'
             ;;
-        *split*)
-            net=splithttp
+        *xhttp*)
+            net=xhttp
             [[ ! $path ]] && path="/$uuid"
-            is_stream='splithttpSettings:{host:"'$host'",path:"'$path'"}'
+            is_stream='xhttpSettings:{host:"'$host'",path:"'$path'"}'
             ;;
         *)
             err "无法识别传输协议: $is_config_file"
@@ -1503,7 +1513,7 @@ info() {
         is_url="ss://$(echo -n ${ss_method}:${ss_password} | base64 -w 0)@${is_addr}:${port}#233boy-$net-${is_addr}"
         is_info_str=($is_protocol $is_addr $port $ss_password $ss_method)
         ;;
-    ws | h2 | grpc | splithttp)
+    ws | h2 | grpc | xhttp)
         is_color=45
         is_can_change=(0 1 2 3 5)
         is_info_show=(0 1 2 3 4 6 7 8)
