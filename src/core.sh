@@ -4,15 +4,15 @@ protocol_list=(
     VMess-TCP
     VMess-mKCP
     # VMess-QUIC
-    VMess-H2-TLS
+    # VMess-H2-TLS
     VMess-WS-TLS
     VMess-gRPC-TLS
-    VLESS-H2-TLS
+    # VLESS-H2-TLS
     VLESS-WS-TLS
     VLESS-gRPC-TLS
     VLESS-XHTTP-TLS
     VLESS-REALITY
-    Trojan-H2-TLS
+    # Trojan-H2-TLS
     Trojan-WS-TLS
     Trojan-gRPC-TLS
     Shadowsocks
@@ -882,7 +882,8 @@ add() {
         tcp | kcp | tcpd | kcpd)
             is_new_protocol=VMess-$(sed 's/^K/mK/;s/D$/-dynamic-port/' <<<${is_lower^^})
             ;;
-        ws | h2 | grpc | vws | vh2 | vgrpc | tws | th2 | tgrpc)
+        # ws | h2 | grpc | vws | vh2 | vgrpc | tws | th2 | tgrpc)
+        ws | grpc | vws | vgrpc | tws | tgrpc)
             is_new_protocol=$(sed -E "s/^V/VLESS-/;s/^T/Trojan-/;/^(W|H|G)/{s/^/VMess-/};s/G/g/" <<<${is_lower^^})-TLS
             ;;
         xhttp)

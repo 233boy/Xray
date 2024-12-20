@@ -18,9 +18,9 @@
 - 一键添加 VLESS-REALITY (默认)
 - 一键添加 Shadowsocks 2022
 - 一键添加 VMess-(TCP/mKCP)
-- 一键添加 VMess-(WS/H2/gRPC)-TLS
-- 一键添加 VLESS-(WS/H2/gRPC/XHTTP)-TLS
-- 一键添加 Trojan-(WS/H2/gRPC)-TLS
+- 一键添加 VMess-(WS/gRPC)-TLS
+- 一键添加 VLESS-(WS/gRPC/XHTTP)-TLS
+- 一键添加 Trojan-(WS/gRPC)-TLS
 - 一键添加 VMess-(TCP/mKCP) 动态端口
 - 一键启用 BBR
 - 一键更改伪装网站
