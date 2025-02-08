@@ -42,7 +42,7 @@ ${host}:${is_https_port} {
     xhttp)
         cat >${is_caddy_site_file} <<<"
 ${host}:${is_https_port} {
-    reverse_proxy ${path}/* 127.0.0.1:${port}
+    reverse_proxy ${path}/* h2c://127.0.0.1:${port}
     import ${is_caddy_site_file}.add
 }"
         ;;
