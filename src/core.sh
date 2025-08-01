@@ -748,7 +748,7 @@ del() {
                 [[ ! $old_host ]] && return # no host exist or not set new host;
                 is_del_host=$old_host
             }
-            [[ $is_del_host && $host != $old_host && ! $is_no_auto_tls ]] && {
+            [[ $is_del_host && $host != $old_host && -f $is_caddy_conf/$is_del_host.conf ]] && {
                 rm -rf $is_caddy_conf/$is_del_host.conf $is_caddy_conf/$is_del_host.conf.add
                 [[ ! $is_new_json ]] && manage restart caddy &
             }
@@ -1414,7 +1414,11 @@ get() {
         fi
         ;;
     ssss | ss2022)
-        openssl rand -base64 32
+        if [[ $(grep 128 <<<$ss_method) ]]; then
+            openssl rand -base64 16
+        else
+            openssl rand -base64 32
+        fi
         [[ $? != 0 ]] && err "无法生成 Shadowsocks 2022 密码, 请安装 openssl."
         ;;
     ping)
