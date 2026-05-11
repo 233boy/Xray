@@ -39,6 +39,19 @@ header_type_list=(
     dtls
     wireguard
 )
+header_type_list_new=(
+    header-dtls
+    header-srtp
+    header-utp
+    header-wechat
+    header-wireguard
+    mkcp-original
+)
+# new mkcp header type
+if [[ $(echo -e "26.1.24\n${is_core_ver##* }" | sort -V | head -n1) == '26.1.24' ]]; then
+    is_xray_new=1
+    header_type_list=(${header_type_list_new[@]})
+fi
 mainmenu=(
     "添加配置"
     "更改配置"
@@ -1208,8 +1221,8 @@ get() {
             is_json_str=$(cat $is_conf_dir/"$is_config_file")
             is_json_data_base=$(jq '.inbounds[0]|.protocol,.port,(.settings|(.clients[0]|.id,.password),.method,.password,.address,.port,.detour.to,(.accounts[0]|.user,.pass))' <<<$is_json_str)
             [[ $? != 0 ]] && err "无法读取此文件: $is_config_file"
-            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.tcpSettings.header.type,(.kcpSettings|.seed,.header.type),.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName,.xhttpSettings.path' <<<$is_json_str)
-            is_json_data_host=$(jq '.inbounds[0]|.streamSettings|.grpc_host,.wsSettings.headers.Host,.httpSettings.host[0],.xhttpSettings.host' <<<$is_json_str)
+            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.tcpSettings.header.type,((.finalmask|.udp[1].settings.password,.udp[0].type)//(.kcpSettings|.seed,.header.type)),.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName,(.xhttpSettings.path//.splithttpSettings.path)' <<<$is_json_str)
+            is_json_data_host=$(jq '.inbounds[0]|.streamSettings|.grpc_host,.wsSettings.headers.Host,.httpSettings.host[0],(.xhttpSettings.host//.splithttpSettings.host)' <<<$is_json_str)
             is_json_data_reality=$(jq '.inbounds[0]|.streamSettings|.security,(.realitySettings|.serverNames[0],.publicKey,.privateKey)' <<<$is_json_str)
             is_up_var_set=(null is_protocol port uuid trojan_password ss_method ss_password door_addr door_port is_dynamic_port is_socks_user is_socks_pass net tcp_type kcp_seed kcp_type quic_type ws_path h2_path grpc_path xhttp_path grpc_host ws_host h2_host xhttp_host is_reality is_servername is_public_key is_private_key)
             [[ $is_debug ]] && msg "\n------------- debug: $is_config_file -------------"
@@ -1226,8 +1239,6 @@ get() {
             # splithttp
             if [[ $net == 'splithttp' ]]; then
                 net=xhttp
-                xhttp_path=$(jq -r '.inbounds[0]|.streamSettings|.splithttpSettings.path' <<<$is_json_str)
-                xhttp_host=$(jq -r '.inbounds[0]|.streamSettings|.splithttpSettings.host' <<<$is_json_str)
             fi
             path="${ws_path}${h2_path}${grpc_path}${xhttp_path}"
             host="${ws_host}${h2_host}${grpc_host}${xhttp_host}"
@@ -1337,6 +1348,10 @@ get() {
             [[ ! $header_type ]] && header_type=$is_random_header_type
             [[ ! $is_no_kcp_seed && ! $kcp_seed ]] && kcp_seed=$uuid
             is_stream='kcpSettings:{seed:"'$kcp_seed'",header:{type:"'$header_type'"}}'
+            # new xray ver use finalmask
+            if [[ $is_xray_new ]]; then
+                is_stream='finalmask:{udp:[{type:"'$header_type'"},{type:"mkcp-aes128gcm",settings:{password:"'$kcp_seed'"}}]}'
+            fi
             ;;
         *quic*)
             net=quic
@@ -1497,7 +1512,12 @@ info() {
     tcp | kcp | quic)
         is_can_change=(0 1 5 7)
         is_info_show=(0 1 2 3 4 5)
-        is_vmess_url=$(jq -c '{v:2,ps:"'233boy-${net}-$is_addr'",add:"'$is_addr'",port:"'$port'",id:"'$uuid'",aid:"0",net:"'$net'",type:"'$header_type'",path:"'$kcp_seed'"}' <<<{})
+        is_info_header_type=$header_type
+        if [[ $is_xray_new ]]; then
+            # avoid GUI unsupport 'header-xxx' string
+            is_info_header_type=$(echo $header_type | sed 's/header-//;s/mkcp-original/none/' | sed 's/wechat/wechat-video/')
+        fi
+        is_vmess_url=$(jq -c '{v:2,ps:"'233boy-${net}-$is_addr'",add:"'$is_addr'",port:"'$port'",id:"'$uuid'",aid:"0",net:"'$net'",type:"'$is_info_header_type'",path:"'$kcp_seed'"}' <<<{})
         is_url=vmess://$(echo -n $is_vmess_url | base64 -w 0)
         is_tmp_port=$port
         [[ $is_dynamic_port ]] && {
@@ -1508,7 +1528,7 @@ info() {
             is_info_show+=(9)
             is_can_change+=(14)
         }
-        is_info_str=($is_protocol $is_addr "$is_tmp_port" $uuid $net $header_type $kcp_seed)
+        is_info_str=($is_protocol $is_addr "$is_tmp_port" $uuid $net $is_info_header_type $kcp_seed)
         if [[ $is_reality ]]; then
             is_color=41
             is_can_change=(0 1 5 10 11)
