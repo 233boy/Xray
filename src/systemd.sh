@@ -1,4 +1,52 @@
 install_service() {
+    # alpine: 使用 OpenRC
+    if [[ $is_alpine ]]; then
+        case $1 in
+        xray | v2ray)
+            cat >/etc/init.d/$is_core <<EOF
+#!/sbin/openrc-run
+name="$is_core_name"
+description="$is_core_name Service"
+command="$is_core_bin"
+command_args="run -config $is_config_json -confdir $is_conf_dir"
+command_background=true
+pidfile="/run/\${RC_SVCNAME}.pid"
+output_log="$is_log_dir/openrc.log"
+error_log="$is_log_dir/openrc.err"
+rc_ulimit="-n 1048576"
+
+depend() {
+    need net
+    use dns
+    after network
+}
+EOF
+            chmod +x /etc/init.d/$is_core
+            ;;
+        caddy)
+            cat >/etc/init.d/caddy <<EOF
+#!/sbin/openrc-run
+name="Caddy"
+description="Caddy"
+command="$is_caddy_bin"
+command_args="run --environ --config $is_caddyfile --adapter caddyfile"
+command_background=true
+pidfile="/run/\${RC_SVCNAME}.pid"
+rc_ulimit="-n 1048576"
+
+depend() {
+    need net
+    use dns
+    after network
+}
+EOF
+            chmod +x /etc/init.d/caddy
+            ;;
+        esac
+        rc-update add $1 default &>/dev/null
+        return
+    fi
+
     case $1 in
     xray | v2ray)
         is_doc_site=https://xtls.github.io/

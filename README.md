@@ -45,6 +45,27 @@
 
 安装及使用：https://233boy.com/xray/xray-script/
 
+# Alpine Linux
+
+脚本已适配 Alpine Linux (使用 `apk` 与 OpenRC), 安装前请先安装必要的依赖:
+
+```
+apk add bash openrc wget
+```
+
+然后按常规方式执行安装即可:
+
+```
+bash <(wget -qO- https://github.com/233boy/xray/raw/main/install.sh)
+```
+
+说明:
+
+- 服务通过 OpenRC 管理, 对应文件位于 `/etc/init.d/xray` 与 `/etc/init.d/caddy`
+- `xray start | stop | restart | status` 等命令在 Alpine 上等效调用 `rc-service`
+- Alpine 默认无 `timedatectl`, 脚本会尝试启动 `chronyd` 或 `ntpd` 来同步时间
+- 如需二维码功能, 请安装: `apk add libqrencode-tools`
+
 # 帮助
 
 使用：`xray help`
