@@ -34,14 +34,24 @@ warn() {
 # root
 [[ $EUID != 0 ]] && err "当前非 ${yellow}ROOT用户.${none}"
 
-# yum or apt-get, ubuntu/debian/centos
-cmd=$(type -P apt-get || type -P yum)
-[[ ! $cmd ]] && err "此脚本仅支持 ${yellow}(Ubuntu or Debian or CentOS)${none}."
+# yum or apt-get or apk, ubuntu/debian/centos/alpine
+cmd=$(type -P apt-get || type -P yum || type -P apk)
+[[ ! $cmd ]] && err "此脚本仅支持 ${yellow}(Ubuntu or Debian or CentOS or Alpine)${none}."
 
-# systemd
-[[ ! $(type -P systemctl) ]] && {
-    err "此系统缺少 ${yellow}(systemctl)${none}, 请尝试执行:${yellow} ${cmd} update -y;${cmd} install systemd -y ${none}来修复此错误."
-}
+# alpine linux
+is_alpine=
+[[ $cmd =~ apk ]] && is_alpine=1
+
+# systemd or openrc
+if [[ $is_alpine ]]; then
+    [[ ! $(type -P rc-service) ]] && {
+        err "此系统缺少 ${yellow}(rc-service)${none}, 请尝试执行:${yellow} ${cmd} add openrc ${none}来修复此错误."
+    }
+else
+    [[ ! $(type -P systemctl) ]] && {
+        err "此系统缺少 ${yellow}(systemctl)${none}, 请尝试执行:${yellow} ${cmd} update -y;${cmd} install systemd -y ${none}来修复此错误."
+    }
+fi
 
 # wget installed or none
 is_wget=$(type -P wget)
@@ -143,11 +153,20 @@ install_pkg() {
     if [[ $cmd_not_found ]]; then
         pkg=$(echo $cmd_not_found | sed 's/,/ /g')
         msg warn "安装依赖包 >${pkg}"
-        $cmd install -y $pkg &>/dev/null
+        if [[ $is_alpine ]]; then
+            $cmd add $pkg &>/dev/null
+        else
+            $cmd install -y $pkg &>/dev/null
+        fi
         if [[ $? != 0 ]]; then
             [[ $cmd =~ yum ]] && yum install epel-release -y &>/dev/null
-            $cmd update -y &>/dev/null
-            $cmd install -y $pkg &>/dev/null
+            if [[ $is_alpine ]]; then
+                $cmd update &>/dev/null
+                $cmd add $pkg &>/dev/null
+            else
+                $cmd update -y &>/dev/null
+                $cmd install -y $pkg &>/dev/null
+            fi
             [[ $? == 0 ]] && >$is_pkg_ok
         else
             >$is_pkg_ok
@@ -331,7 +350,12 @@ main() {
 
     timedatectl set-ntp true &>/dev/null
     [[ $? != 0 ]] && {
-        msg warn "${yellow}\e[4m提醒!!! 无法设置自动同步时间, 可能会影响使用 VMess 协议.${none}"
+        [[ $is_alpine ]] || msg warn "${yellow}\e[4m提醒!!! 无法设置自动同步时间, 可能会影响使用 VMess 协议.${none}"
+    }
+    # alpine 默认无 timedatectl, 尝试用 chronyd / ntpd 替代
+    [[ $is_alpine ]] && {
+        rc-service chronyd start &>/dev/null || rc-service ntpd start &>/dev/null || \
+            msg warn "${yellow}\e[4m提醒!!! 无法设置自动同步时间, 可能会影响使用 VMess 协议.${none}"
     }
 
     # install dependent pkg

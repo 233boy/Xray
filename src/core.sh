@@ -786,13 +786,13 @@ uninstall() {
     fi
     manage stop &>/dev/null
     manage disable &>/dev/null
-    rm -rf $is_core_dir $is_log_dir $is_sh_bin /lib/systemd/system/$is_core.service
+    rm -rf $is_core_dir $is_log_dir $is_sh_bin /lib/systemd/system/$is_core.service /etc/init.d/$is_core
     sed -i "/$is_core/d" /root/.bashrc
     # uninstall caddy; 2 is ask result
     if [[ $REPLY == '2' ]]; then
         manage stop caddy &>/dev/null
         manage disable caddy &>/dev/null
-        rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service
+        rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service /etc/init.d/caddy
     fi
     [[ $is_install_sh ]] && return # reinstall
     _green "\n卸载完成!"
@@ -835,7 +835,15 @@ manage() {
         is_do_name_msg=$is_core_name
         ;;
     esac
-    systemctl $is_do $is_do_name
+    if [[ $is_alpine ]]; then
+        case $is_do in
+        enable)  rc-update add $is_do_name default &>/dev/null ;;
+        disable) rc-update del $is_do_name default &>/dev/null ;;
+        *)       rc-service $is_do_name $is_do ;;
+        esac
+    else
+        systemctl $is_do $is_do_name
+    fi
     [[ $is_test_run && ! $is_new_install ]] && {
         sleep 2
         if [[ ! $(pgrep -f $is_run_bin) ]]; then
@@ -1465,7 +1473,11 @@ get() {
         bash <<<$is_install_sh
         ;;
     test-run)
-        systemctl list-units --full -all &>/dev/null
+        if [[ $is_alpine ]]; then
+            rc-status &>/dev/null
+        else
+            systemctl list-units --full -all &>/dev/null
+        fi
         [[ $? != 0 ]] && {
             _yellow "\n无法执行测试, 请检查 systemctl 状态.\n"
             return
@@ -1641,7 +1653,11 @@ url_qr() {
             if [[ $(type -P qrencode) ]]; then
                 qrencode -t ANSI "${is_url}"
             else
-                msg "请安装 qrencode: $(_green "$cmd update -y; $cmd install qrencode -y")"
+                if [[ $is_alpine ]]; then
+                    msg "请安装 qrencode: $(_green "$cmd add libqrencode-tools")"
+                else
+                    msg "请安装 qrencode: $(_green "$cmd update -y; $cmd install qrencode -y")"
+                fi
             fi
             msg
             msg "如果无法正常显示或识别, 请使用下面的链接来生成二维码:"

@@ -58,8 +58,12 @@ _wget() {
     wget --no-check-certificate "$@"
 }
 
-# yum or apt-get
-cmd=$(type -P apt-get || type -P yum)
+# yum or apt-get or apk
+cmd=$(type -P apt-get || type -P yum || type -P apk)
+
+# alpine linux
+is_alpine=
+[[ $cmd =~ apk ]] && is_alpine=1
 
 # x64
 case $(arch) in
@@ -93,7 +97,8 @@ is_caddy_dir=/etc/caddy
 is_caddy_repo=caddyserver/caddy
 is_caddyfile=$is_caddy_dir/Caddyfile
 is_caddy_conf=$is_caddy_dir/$author
-is_caddy_service=$(systemctl list-units --full -all | grep caddy.service)
+is_caddy_service=$(systemctl list-units --full -all 2>/dev/null | grep caddy.service)
+[[ $is_alpine && -f /etc/init.d/caddy ]] && is_caddy_service=1
 is_http_port=80
 is_https_port=443
 
@@ -108,8 +113,8 @@ else
 fi
 if [[ -f $is_caddy_bin && -d $is_caddy_dir && $is_caddy_service ]]; then
     is_caddy=1
-    # fix caddy run; ver >= 2.8.2
-    [[ ! $(grep '\-\-adapter caddyfile' /lib/systemd/system/caddy.service) ]] && {
+    # fix caddy run; ver >= 2.8.2 (仅 systemd)
+    [[ ! $is_alpine ]] && [[ ! $(grep '\-\-adapter caddyfile' /lib/systemd/system/caddy.service) ]] && {
         load systemd.sh
         install_service caddy
         systemctl restart caddy &
