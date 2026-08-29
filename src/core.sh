@@ -645,6 +645,7 @@ change() {
             get_pbk
             add $net
         else
+            local is_key_net=$net
             [[ $is_new_private_key && ! $is_new_public_key ]] && {
                 err "无法找到 Public key."
             }
@@ -657,6 +658,7 @@ change() {
             is_test_json=1
             # create server $is_protocol-$net | $is_core_bin -test &>/dev/null
             create server $is_protocol-$net
+            net=$is_key_net
             $is_core_bin -test <<<"$is_new_json" &>/dev/null
             if [[ $? != 0 ]]; then
                 err "Private key 无法通过测试."
@@ -664,6 +666,7 @@ change() {
             is_private_key=$is_new_public_key
             # create server $is_protocol-$net | $is_core_bin -test &>/dev/null
             create server $is_protocol-$net
+            net=$is_key_net
             $is_core_bin -test <<<"$is_new_json" &>/dev/null
             if [[ $? != 0 ]]; then
                 err "Public key 无法通过测试."
