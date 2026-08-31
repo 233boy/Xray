@@ -1765,7 +1765,7 @@ is_main_menu() {
         show_help
         ;;
     9)
-        ask list is_do_other "启用BBR 查看日志 查看错误日志 测试运行 重装脚本 设置DNS"
+        ask list is_do_other "启用BBR 查看日志 查看错误日志 测试运行 重装脚本 设置DNS 设置出站IP优先级"
         case $REPLY in
         1)
             load bbr.sh
@@ -1786,6 +1786,10 @@ is_main_menu() {
         6)
             load dns.sh
             dns_set
+            ;;
+        7)
+            load ip.sh
+            ip_set
             ;;
         esac
         ;;
