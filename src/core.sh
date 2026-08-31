@@ -108,8 +108,6 @@ servername_list=(
     www.amazon.com
     www.ebay.com
     www.paypal.com
-    www.cloudflare.com
-    dash.cloudflare.com
     aws.amazon.com
 )
 
