@@ -15,10 +15,11 @@ protocol_list=(
     # Trojan-H2-TLS
     Trojan-WS-TLS
     Trojan-gRPC-TLS
+    Hysteria2
     Shadowsocks
     # Dokodemo-Door
-    VMess-TCP-dynamic-port
-    VMess-mKCP-dynamic-port
+    # VMess-TCP-dynamic-port
+    # VMess-mKCP-dynamic-port
     # VMess-QUIC-dynamic-port
     Socks
 )
@@ -33,11 +34,11 @@ ss_method_list=(
 )
 header_type_list=(
     none
-    srtp
-    utp
-    wechat-video
-    dtls
-    wireguard
+    # srtp
+    # utp
+    # wechat-video
+    # dtls
+    # wireguard
 )
 header_type_list_new=(
     header-dtls
@@ -50,7 +51,7 @@ header_type_list_new=(
 # new mkcp header type
 if [[ $(echo -e "26.1.24\n${is_core_ver##* }" | sort -V | head -n1) == '26.1.24' ]]; then
     is_xray_new=1
-    header_type_list=(${header_type_list_new[@]})
+    # header_type_list=(${header_type_list_new[@]})
 fi
 mainmenu=(
     "添加配置"
@@ -85,6 +86,7 @@ info_list=(
     "指纹 (Fingerprint)"
     "公钥 (Public key)"
     "用户名 (Username)"
+    "跳过证书验证 (allowlnsecure)"
 )
 change_list=(
     "更改协议"
@@ -112,7 +114,8 @@ servername_list=(
 )
 
 is_random_ss_method=${ss_method_list[$(shuf -i 4-6 -n1)]}     # random only use ss2022
-is_random_header_type=${header_type_list[$(shuf -i 1-5 -n1)]} # random dont use none
+# is_random_header_type=${header_type_list[$(shuf -i 1-5 -n1)]} # random dont use none
+is_random_header_type=none
 is_random_servername=${servername_list[$(shuf -i 0-${#servername_list[@]} -n1) - 1]}
 
 msg() {
@@ -569,7 +572,7 @@ change() {
     4)
         # new password
         is_new_pass=$3
-        if [[ $net == 'ss' || $is_trojan || $is_socks_pass ]]; then
+        if [[ $net == 'ss' || $is_trojan || $is_socks_pass || $hysteria_password ]]; then
             [[ $is_auto ]] && get_uuid && is_new_pass=$tmp_uuid
         else
             err "($is_config_file) 不支持更改密码."
@@ -578,6 +581,7 @@ change() {
         trojan_password=$is_new_pass
         ss_password=$is_new_pass
         is_socks_pass=$is_new_pass
+        hysteria_password=$is_new_pass
         add $net
         ;;
     5)
@@ -915,6 +919,9 @@ add() {
         r | reality)
             is_new_protocol=VLESS-REALITY
             ;;
+        hy | hy2 | hysteria*)
+            is_new_protocol=Hysteria2
+            ;;
         ss)
             is_new_protocol=Shadowsocks
             ;;
@@ -956,7 +963,8 @@ add() {
         is_use_dynamic_port_end=$6
         [[ $(grep dynamic-port <<<$is_new_protocol) ]] && is_dynamic_port=1
         if [[ $is_dynamic_port ]]; then
-            is_add_opts="[port] [uuid] [type] [start_port] [end_port]"
+            # is_add_opts="[port] [uuid] [type] [start_port] [end_port]"
+            err "无法执行操作, 动态配置选项已移除"
         else
             is_add_opts="[port] [uuid] [type]"
         fi
@@ -967,6 +975,11 @@ add() {
         is_use_uuid=$3
         is_use_servername=$4
         is_add_opts="[port] [uuid] [sni]"
+        ;;
+    hysteria*)
+        is_use_port=$2
+        is_use_pass=$3
+        is_add_opts="[port] [password]"
         ;;
     shadowsocks)
         is_use_port=$2
@@ -1131,9 +1144,9 @@ add() {
             [[ ! $port ]] && ask string port "请输入端口:"
 
             case ${is_new_protocol,,} in
-            *tcp* | *kcp* | *quic*)
-                [[ ! $header_type ]] && ask set_header_type
-                ;;
+            # *tcp* | *kcp* | *quic*)
+            #     [[ ! $header_type ]] && ask set_header_type
+            #     ;;
             socks)
                 # set user
                 [[ ! $is_socks_user ]] && ask string is_socks_user "请设置用户名:"
@@ -1228,12 +1241,12 @@ get() {
         get file $2
         if [[ $is_config_file ]]; then
             is_json_str=$(cat $is_conf_dir/"$is_config_file")
-            is_json_data_base=$(jq '.inbounds[0]|.protocol,.port,(.settings|(.clients[0]|.id,.password),.method,.password,.address,.port,.detour.to,(.accounts[0]|.user,.pass))' <<<$is_json_str)
+            is_json_data_base=$(jq '.inbounds[0]|.protocol,.port,(.settings|(.clients[0]|.id,.password),.method,.password,.address,.port,.detour.to,(.accounts[0]|.user,.pass)),.streamSettings.hysteriaSettings.auth' <<<$is_json_str)
             [[ $? != 0 ]] && err "无法读取此文件: $is_config_file"
-            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.tcpSettings.header.type,((.finalmask|.udp[1].settings.password,.udp[0].type)//(.kcpSettings|.seed,.header.type)),.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName,(.xhttpSettings.path//.splithttpSettings.path)' <<<$is_json_str)
+            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.tcpSettings.header.type,((.finalmask.udp[0].settings|.value,.header)//(.kcpSettings|.seed,.header.type)),.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName,(.xhttpSettings.path//.splithttpSettings.path)' <<<$is_json_str)
             is_json_data_host=$(jq '.inbounds[0]|.streamSettings|.grpc_host,.wsSettings.headers.Host,.httpSettings.host[0],(.xhttpSettings.host//.splithttpSettings.host)' <<<$is_json_str)
             is_json_data_reality=$(jq '.inbounds[0]|.streamSettings|.security,(.realitySettings|.serverNames[0],.publicKey,.privateKey)' <<<$is_json_str)
-            is_up_var_set=(null is_protocol port uuid trojan_password ss_method ss_password door_addr door_port is_dynamic_port is_socks_user is_socks_pass net tcp_type kcp_seed kcp_type quic_type ws_path h2_path grpc_path xhttp_path grpc_host ws_host h2_host xhttp_host is_reality is_servername is_public_key is_private_key)
+            is_up_var_set=(null is_protocol port uuid trojan_password ss_method ss_password door_addr door_port is_dynamic_port is_socks_user is_socks_pass hysteria_password net tcp_type kcp_seed kcp_type quic_type ws_path h2_path grpc_path xhttp_path grpc_host ws_host h2_host xhttp_host is_reality is_servername is_public_key is_private_key)
             [[ $is_debug ]] && msg "\n------------- debug: $is_config_file -------------"
             i=0
             for v in $(sed 's/""/null/g;s/"//g' <<<"$is_json_data_base $is_json_data_more $is_json_data_host $is_json_data_reality"); do
@@ -1257,7 +1270,7 @@ get() {
             else
                 is_reality=
             fi
-            [[ ! $kcp_seed ]] && is_no_kcp_seed=1
+            # [[ ! $kcp_seed ]] && is_no_kcp_seed=1
             is_config_name=$is_config_file
             if [[ $is_dynamic_port ]]; then
                 is_dynamic_port_file=$is_conf_dir/$is_dynamic_port
@@ -1305,6 +1318,14 @@ get() {
             is_client_id_json='settings:{servers:[{address:"'$is_addr'",port:'"$port"',password:"'$trojan_password'"}]}'
             is_trojan=1
             ;;
+        hysteria*)
+            net=hysteria
+            is_protocol=hysteria
+            [[ ! $hysteria_password ]] && hysteria_password=$uuid
+            # is_client_id_json='settings:{address:"'$is_addr'",port:'"$port"',version:2},streamSettings:{network:"'$net'",security:"tls",tlsSettings:{allowInsecure:true},hysteriaSettings:{version:2,auth:"'$hysteria_password'"}}'
+            [[ ! -f $is_core_dir/bin/tls.crt || ! -f $is_core_dir/bin/tls.key ]] && $is_core_bin tls cert --expire=233333h --file="$is_core_dir/bin/tls" &>/dev/null
+            json_str='settings:{version:2},streamSettings:{network:"'$net'",security:"tls",tlsSettings:{alpn:["h3"],certificates:[{usage:"encipherment",certificateFile:"'$is_core_dir/bin/tls.crt'",keyFile:"'$is_core_dir/bin/tls.key'"}]},hysteriaSettings:{version:2,auth:"'$hysteria_password'"}}'
+        ;;
         shadowsocks*)
             net=ss
             is_protocol=shadowsocks
@@ -1354,12 +1375,15 @@ get() {
             ;;
         *kcp* | *mkcp)
             net=kcp
-            [[ ! $header_type ]] && header_type=$is_random_header_type
-            [[ ! $is_no_kcp_seed && ! $kcp_seed ]] && kcp_seed=$uuid
-            is_stream='kcpSettings:{seed:"'$kcp_seed'",header:{type:"'$header_type'"}}'
+            # header type only set to none
+            header_type=none
+            # [[ ! $header_type ]] && header_type=$is_random_header_type
+            # [[ ! $is_no_kcp_seed && ! $kcp_seed ]] && kcp_seed=$uuid
+            [[ ! $kcp_seed ]] && kcp_seed=$uuid
+            is_stream='kcpSettings:{seed:"'$kcp_seed'"}'
             # new xray ver use finalmask
             if [[ $is_xray_new ]]; then
-                is_stream='finalmask:{udp:[{type:"'$header_type'"},{type:"mkcp-aes128gcm",settings:{password:"'$kcp_seed'"}}]}'
+                is_stream='finalmask:{udp:[{type:"mkcp-legacy",settings:{value:"'$kcp_seed'"}}]}'
             fi
             ;;
         *quic*)
@@ -1534,7 +1558,7 @@ info() {
         is_url=vmess://$(echo -n $is_vmess_url | base64 -w 0)
         is_tmp_port=$port
         [[ $is_dynamic_port ]] && {
-            is_can_change+=(12)
+            # is_can_change+=(12)
             is_tmp_port="$port & 动态端口: $is_dynamic_port_range"
         }
         [[ $kcp_seed ]] && {
@@ -1549,6 +1573,14 @@ info() {
             is_info_str=($is_protocol $is_addr $port $uuid xtls-rprx-vision reality $is_servername "chrome" $is_public_key)
             is_url="$is_protocol://$uuid@$is_addr:$port?encryption=none&security=reality&flow=xtls-rprx-vision&type=tcp&sni=$is_servername&pbk=$is_public_key&fp=chrome#233boy-$net-$is_addr"
         fi
+        ;;
+    hy*)
+        is_can_change=(0 1 4)
+        is_info_show=(0 1 2 10 8 20)
+        # fix xray core for client use.
+        is_sha256=$(openssl x509 -noout -fingerprint -sha256 -in $is_core_dir/bin/tls.crt | sed 's/.*=//;s/://g')
+        is_url="${is_protocol}2://$hysteria_password@$is_addr:$port?alpn=h3&insecure=1&allowInsecure=1&pinSHA256=$is_sha256#233boy-$net-$is_addr"
+        is_info_str=(${is_protocol}2 $is_addr $port $hysteria_password tls "是, (设置, 固定证书>证书指纹(SHA-256): $is_sha256)")
         ;;
     ss)
         is_can_change=(0 1 4 6)
