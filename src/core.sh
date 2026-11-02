@@ -1578,9 +1578,9 @@ info() {
         is_can_change=(0 1 4)
         is_info_show=(0 1 2 10 8 20)
         # fix xray core for client use.
-        is_sha256=$(openssl x509 -noout -fingerprint -sha256 -in $is_core_dir/bin/tls.crt | sed 's/.*=//;s/://g')
+        is_sha256=$($is_core_bin tls hash --cert $is_core_dir/bin/tls.crt | sed 's/.* //')
         is_url="${is_protocol}2://$hysteria_password@$is_addr:$port?alpn=h3&insecure=1&allowInsecure=1&pinSHA256=$is_sha256#233boy-$net-$is_addr"
-        is_info_str=(${is_protocol}2 $is_addr $port $hysteria_password tls "是, (设置, 固定证书>证书指纹(SHA-256): $is_sha256)")
+        is_info_str=(${is_protocol}2 $is_addr $port $hysteria_password tls "是 (设置, 固定证书>证书指纹(SHA-256): $is_sha256)")
         ;;
     ss)
         is_can_change=(0 1 4 6)

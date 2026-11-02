@@ -449,8 +449,8 @@ main() {
     mkdir -p $is_conf_dir
 
     load core.sh
-    # create a tcp config
-    add reality
+    # create a config
+    add hy2
     # remove tmp dir and exit.
     exit_and_del_tmpdir ok
 }
